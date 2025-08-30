@@ -145,9 +145,32 @@ if ($null -eq $dbSubnetNsg)
                     -Location $location `
                     -Name $dbSubnetName
 }
+else
+{
+    Write-Host "NSG $dbSubnetName already exists"
+}
 
-Write-Host "Creating a virtual network ..."
-$webSubnet = New-AzVirtualNetworkSubnetConfig -Name $webSubnetName -AddressPrefix $webSubnetIpRange -NetworkSecurityGroup $webSubnetNsg
-$dbSubnet = New-AzVirtualNetworkSubnetConfig -Name $dbSubnetName -AddressPrefix $dbSubnetIpRange -NetworkSecurityGroup $dbSubnetNsg
-$mngSubnet = New-AzVirtualNetworkSubnetConfig -Name $mngSubnetName -AddressPrefix $mngSubnetIpRange -NetworkSecurityGroup $mngSubnetNsg
-New-AzVirtualNetwork -Name $virtualNetworkName -ResourceGroupName $resourceGroupName -Location $location -AddressPrefix $vnetAddressPrefix -Subnet $webSubnet,$dbSubnet,$mngSubnet
+Write-Host "Getting existing virtual network..."
+$vnet = Get-AzVirtualNetwork -Name $virtualNetworkName -ResourceGroupName $resourceGroupName -ErrorAction SilentlyContinue
+
+if ($null -eq $vnet)
+{
+    Write-Host "Creating a virtual network ..."
+    $webSubnet = New-AzVirtualNetworkSubnetConfig -Name $webSubnetName -AddressPrefix $webSubnetIpRange -NetworkSecurityGroup $webSubnetNsg
+    $dbSubnet = New-AzVirtualNetworkSubnetConfig -Name $dbSubnetName -AddressPrefix $dbSubnetIpRange -NetworkSecurityGroup $dbSubnetNsg
+    $mngSubnet = New-AzVirtualNetworkSubnetConfig -Name $mngSubnetName -AddressPrefix $mngSubnetIpRange -NetworkSecurityGroup $mngSubnetNsg
+    New-AzVirtualNetwork -Name $virtualNetworkName -ResourceGroupName $resourceGroupName -Location $location -AddressPrefix $vnetAddressPrefix -Subnet $webSubnet,$dbSubnet,$mngSubnet
+}
+else
+{
+    Write-Host "Updating existing virtual network with NSGs..."
+    $webSubnet = $vnet.Subnets | Where-Object Name -eq $webSubnetName
+    $dbSubnet = $vnet.Subnets | Where-Object Name -eq $dbSubnetName
+    $mngSubnet = $vnet.Subnets | Where-Object Name -eq $mngSubnetName
+
+    $webSubnet.NetworkSecurityGroup = $webSubnetNsg
+    $dbSubnet.NetworkSecurityGroup = $dbSubnetNsg
+    $mngSubnet.NetworkSecurityGroup = $mngSubnetNsg
+
+    Set-AzVirtualNetwork -VirtualNetwork $vnet
+}
