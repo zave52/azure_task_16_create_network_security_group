@@ -14,9 +14,47 @@ $mngSubnetIpRange = "10.20.30.128/26"
 Write-Host "Creating a resource group $resourceGroupName ..."
 New-AzResourceGroup -Name $resourceGroupName -Location $location
 
-Write-Host "Creating web network security group..."
-$webRule = New-AzNetworkSecurityRuleConfig `
-            -Name web-allow-http-https-rule `
+$webRuleName = "web-allow-http-https-rule"
+$webSubnetNsg = Get-AzNetworkSecurityGroup `
+                -Name $webSubnetName `
+                -ResourceGroupName $resourceGroupName `
+                -ErrorAction SilentlyContinue
+
+if ($null -eq $webSubnetNsg)
+{
+    Write-Host "NSG $webSubnetName does not exist, creating..."
+    $webRule = New-AzNetworkSecurityRuleConfig `
+                -Name $webRuleName `
+                -Description "Allow HTTP and HTTPS" `
+                -Access Allow `
+                -Protocol Tcp `
+                -Direction Inbound `
+                -Priority 100 `
+                -SourceAddressPrefix Internet `
+                -SourcePortRange * `
+                -DestinationAddressPrefix * `
+                -DestinationPortRange 80,443
+
+    $webSubnetNsg = New-AzNetworkSecurityGroup `
+                    -ResourceGroupName $resourceGroupName `
+                    -Location $location `
+                    -Name $webSubnetName `
+                    -SecurityRules $webRule
+}
+else
+{
+    Write-Host "NSG $webSubnetName already exists, checking rules..."
+    $existingRule = Get-AzNetworkSecurityRuleConfig `
+                    -NetworkSecurityGroup $webSubnetNsg `
+                    -Name $webRuleName `
+                    -ErrorAction SilentlyContinue
+
+    if ($null -eq $existingRule)
+    {
+        Write-Host "Adding missing rule $webRuleName..."
+        Add-AzNetworkSecurityRuleConfig `
+            -NetworkSecurityGroup $webSubnetNsg `
+            -Name $webRuleName `
             -Description "Allow HTTP and HTTPS" `
             -Access Allow `
             -Protocol Tcp `
@@ -27,15 +65,55 @@ $webRule = New-AzNetworkSecurityRuleConfig `
             -DestinationAddressPrefix * `
             -DestinationPortRange 80,443
 
-$webSubnetNsg = New-AzNetworkSecurityGroup `
-                -ResourceGroupName $resourceGroupName `
-                -Location $location `
-                -Name $webSubnetName `
-                -SecurityRules $webRule
+        $webSubnetNsg | Set-AzNetworkSecurityGroup
+    }
+    else
+    {
+        Write-Host "Rule $webRuleName already exists in NSG $webSubnetName"
+    }
+}
 
-Write-Host "Creating mngSubnet network security group..."
-$mngRule = New-AzNetworkSecurityRuleConfig `
-            -Name mng-allow-ssh-rule `
+$mngRuleName = "mng-allow-ssh-rule"
+$mngSubnetNsg = Get-AzNetworkSecurityGroup `
+                -Name $mngSubnetName `
+                -ResourceGroupName $resourceGroupName `
+                -ErrorAction SilentlyContinue
+
+if ($null -eq $mngSubnetNsg)
+{
+    Write-Host "NSG $mngSubnetName does not exist, creating..."
+    $mngRule = New-AzNetworkSecurityRuleConfig `
+                -Name $mngRuleName `
+                -Description "Allow SSH" `
+                -Access Allow `
+                -Protocol Tcp `
+                -Direction Inbound `
+                -Priority 100 `
+                -SourceAddressPrefix Internet `
+                -SourcePortRange * `
+                -DestinationAddressPrefix * `
+                -DestinationPortRange 22
+
+    $mngSubnetNsg = New-AzNetworkSecurityGroup `
+                    -ResourceGroupName $resourceGroupName `
+                    -Location $location `
+                    -Name $mngSubnetName `
+                    -SecurityRules $mngRule
+}
+else
+{
+    Write-Host "NSG $mngSubnetName already exists, checking rules..."
+    $existingRule = Get-AzNetworkSecurityRuleConfig `
+                    -NetworkSecurityGroup $mngSubnetNsg `
+                    -Name $mngRuleName `
+                    -ErrorAction SilentlyContinue
+
+    if ($null -eq $existingRule)
+    {
+        Write-Host "Adding missing rule $mngRuleName..."
+        Add-AzNetworkSecurityRuleConfig `
+            -NetworkSecurityGroup $mngSubnetNsg `
+            -Name $mngRuleName `
             -Description "Allow SSH" `
             -Access Allow `
             -Protocol Tcp `
@@ -46,17 +124,27 @@ $mngRule = New-AzNetworkSecurityRuleConfig `
             -DestinationAddressPrefix * `
             -DestinationPortRange 22
 
-$mngSubnetNsg = New-AzNetworkSecurityGroup `
-                -ResourceGroupName $resourceGroupName `
-                -Location $location `
-                -Name $mngSubnetName `
-                -SecurityRules $mngRule
+        $mngSubnetNsg | Set-AzNetworkSecurityGroup
+    }
+    else
+    {
+        Write-Host "Rule $mngRuleName already exists in NSG $mngSubnetName"
+    }
+}
 
-Write-Host "Creating dbSubnet network security group..."
-$dbSubnetNsg = New-AzNetworkSecurityGroup `
-                -ResourceGroupName $resourceGroupName `
-                -Location $location `
+$dbSubnetNsg = Get-AzNetworkSecurityGroup `
                 -Name $dbSubnetName `
+                -ResourceGroupName $resourceGroupName `
+                -ErrorAction SilentlyContinue
+
+if ($null -eq $dbSubnetNsg)
+{
+    Write-Host "NSG $dbSubnetName does not exist, creating..."
+    $dbSubnetNsg = New-AzNetworkSecurityGroup `
+                    -ResourceGroupName $resourceGroupName `
+                    -Location $location `
+                    -Name $dbSubnetName
+}
 
 Write-Host "Creating a virtual network ..."
 $webSubnet = New-AzVirtualNetworkSubnetConfig -Name $webSubnetName -AddressPrefix $webSubnetIpRange -NetworkSecurityGroup $webSubnetNsg
